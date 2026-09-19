@@ -71,7 +71,7 @@ print("Connecting to legacy MSSQL Database...")
 connection_string = (
     "DRIVER={ODBC Driver 18 for SQL Server};"
     f"SERVER={db_host},{db_port};"
-    "DATABASE=SupplyChainDB;"
+    "DATABASE=SupplyChainDB_Cloud;"
     f"UID={db_user};"
     f"PWD={db_password};"
     "Encrypt=no;"
