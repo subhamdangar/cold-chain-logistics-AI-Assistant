@@ -1,0 +1,15 @@
+USE SupplyChainDB;
+GO
+
+CREATE TABLE FDE_VIEWS.AgentAuditLog (
+    LogID INT IDENTITY(1,1) PRIMARY KEY,
+    Timestamp DATETIME DEFAULT GETDATE(),
+    SessionID VARCHAR(50),
+    NodeExecuted VARCHAR(50),
+    ToolName VARCHAR(100),
+    Content NVARCHAR(MAX)
+);
+GO
+
+GRANT INSERT ON FDE_VIEWS.AgentAuditLog TO AI_AGENT_RO;
+GO

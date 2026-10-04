@@ -3,3 +3,140 @@
 __pycache__/
 .venv
 .venv
+
+# ==========================================
+# Python
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# ==========================================
+# Virtual Environments
+# ==========================================
+.venv/
+venv/
+env/
+ENV/
+
+# ==========================================
+# Environment / Secrets
+# ==========================================
+.env
+.env.*
+!.env.example
+
+# API keys / credentials
+*.pem
+*.key
+secrets/
+credentials/
+*_credentials.json
+
+# ==========================================
+# Jupyter
+# ==========================================
+.ipynb_checkpoints/
+
+# ==========================================
+# Streamlit
+# ==========================================
+.streamlit/secrets.toml
+
+# ==========================================
+# Data
+# ==========================================
+# data/raw/
+# data/processed/
+# data/*.csv
+# data/*.xlsx
+# data/*.json
+
+# Keep directory structure if needed
+# !data/.gitkeep
+
+# ==========================================
+# Databases / Local DB Files
+# ==========================================
+*.db
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+
+# SQL Server local files
+mssql_data/
+sql_data/
+
+# ==========================================
+# Vector Databases / Local Indexes
+# ==========================================
+vectordb/
+vector_db/
+chroma_db/
+.faiss/
+*.faiss
+*.pkl
+
+# ==========================================
+# Logs
+# ==========================================
+*.log
+logs/
+
+# ==========================================
+# Temporary files
+# ==========================================
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+.DS_Store
+
+# ==========================================
+# IDEs / Editors
+# ==========================================
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+.idea/
+*.iml
+
+# ==========================================
+# OS Files
+# ==========================================
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# Testing / Coverage
+# ==========================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# ==========================================
+# Type Checking / Linters
+# ==========================================
+.mypy_cache/
+.pyright/
+.ruff_cache/
+
+# ==========================================
+# Local configuration
+# ==========================================
+*.local
+config.local.*

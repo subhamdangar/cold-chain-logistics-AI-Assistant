@@ -94,7 +94,7 @@ def query_telemetry_db(sql_query: str) -> str:
     connection_string = (
             f"DRIVER={{ODBC Driver 18 for SQL Server}};"
             f"SERVER={db_host},{db_port};"
-            f"DATABASE=SupplyChainDB_Cloud;"
+            f"DATABASE=SupplyChainDB;"
             f"UID={db_user};"
             f"PWD={db_password};"
             f"Encrypt=no;"

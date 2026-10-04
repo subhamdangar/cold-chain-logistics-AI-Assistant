@@ -2,9 +2,12 @@ import os
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
-from typing import Annotated, TypedDict
+from typing import Annotated, Optional, TypedDict
 
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import (
+    BaseMessage, SystemMessage, HumanMessage, AIMessage, ToolMessage,
+    RemoveMessage
+)
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -27,6 +30,7 @@ load_dotenv(project_root / ".env")
 
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
+    conversation_summary: Optional[str]
 
 # ==========================================
 # 2. FACTORY INITIALIZATION: AGENT REASONER LLM
@@ -83,20 +87,160 @@ fde_tools = [
 llm_with_tools = llm.bind_tools(fde_tools)
 
 # ==========================================
-# 3. GRAPH ARCHITECTURE ASSEMBLY
+# 3. CONVERSATION COMPACTION CONFIGURATION
+# ==========================================
+# Maximum characters to keep from any single tool output when
+# building the LLM prompt.  The full output is still stored in
+# state (and therefore visible in audit logs / Streamlit expanders).
+TOOL_OUTPUT_MAX_CHARS = 1500
+
+# When the total message count exceeds this threshold, older messages
+# are summarized into `conversation_summary` and removed from state.
+COMPACTION_THRESHOLD = 20
+
+# Number of recent messages to always keep verbatim (never summarized).
+KEEP_RECENT = 6
+
+
+def _truncate_tool_content(content: str, max_chars: int = TOOL_OUTPUT_MAX_CHARS) -> str:
+    """Truncate a tool output string, appending a notice if trimmed."""
+    if len(content) <= max_chars:
+        return content
+    return content[:max_chars] + "\n... [output truncated for brevity]"
+
+
+def _build_llm_messages(state: AgentState) -> list[BaseMessage]:
+    """
+    Build a lean message list for the LLM call:
+      1. System prompt (first SystemMessage in history, if any)
+      2. Conversation summary injected as a SystemMessage
+      3. Recent messages with tool outputs truncated
+    """
+    all_msgs = state["messages"]
+    summary = state.get("conversation_summary") or ""
+
+    # Separate the system prompt from the rest
+    system_msgs = [m for m in all_msgs if isinstance(m, SystemMessage)]
+    non_system = [m for m in all_msgs if not isinstance(m, SystemMessage)]
+
+    # Always keep the most recent KEEP_RECENT non-system messages
+    recent = non_system[-KEEP_RECENT:] if len(non_system) > KEEP_RECENT else non_system
+
+    # Truncate tool outputs in the recent window
+    compacted_recent: list[BaseMessage] = []
+    for msg in recent:
+        if isinstance(msg, ToolMessage) and msg.content:
+            clone = ToolMessage(
+                content=_truncate_tool_content(msg.content),
+                tool_call_id=msg.tool_call_id,
+                name=msg.name,
+            )
+            compacted_recent.append(clone)
+        else:
+            compacted_recent.append(msg)
+
+    # Assemble: system prompt → summary → recent messages
+    prompt_parts: list[BaseMessage] = []
+    if system_msgs:
+        prompt_parts.append(system_msgs[0])
+    if summary:
+        prompt_parts.append(
+            SystemMessage(
+                content=(
+                    "The following is a concise summary of the earlier "
+                    "conversation and tool results. Use it as context:\n\n"
+                    + summary
+                )
+            )
+        )
+    prompt_parts.extend(compacted_recent)
+    return prompt_parts
+
+
+# ==========================================
+# 4. GRAPH ARCHITECTURE ASSEMBLY
 # ==========================================
 def reasoning_node(state: AgentState):
-    response = llm_with_tools.invoke(state["messages"])
+    """Call the LLM with a compacted message window."""
+    llm_messages = _build_llm_messages(state)
+    response = llm_with_tools.invoke(llm_messages)
     return {"messages": [response]}
+
+
+def compact_history(state: AgentState):
+    """
+    Summarize older messages when history exceeds COMPACTION_THRESHOLD.
+    Keeps the system prompt and the most recent KEEP_RECENT messages.
+    Removes everything in between and stores a rolling summary.
+    """
+    all_msgs = state["messages"]
+
+    # Only compact if we exceed the threshold
+    if len(all_msgs) <= COMPACTION_THRESHOLD:
+        return {}  # no-op
+
+    system_msgs = [m for m in all_msgs if isinstance(m, SystemMessage)]
+    non_system = [m for m in all_msgs if not isinstance(m, SystemMessage)]
+
+    if len(non_system) <= KEEP_RECENT:
+        return {}
+
+    # Messages to summarize: everything except the most recent KEEP_RECENT
+    older = non_system[:-KEEP_RECENT]
+
+    # Build a textual digest of the older messages for summarization
+    digest_parts = []
+    existing_summary = state.get("conversation_summary") or ""
+    if existing_summary:
+        digest_parts.append(f"Previous summary: {existing_summary}")
+
+    for msg in older:
+        role = getattr(msg, "type", "unknown")
+        content = getattr(msg, "content", "") or ""
+        # Heavily truncate individual messages for the summarization call
+        if len(content) > 500:
+            content = content[:500] + "..."
+        if content.strip():
+            digest_parts.append(f"[{role}]: {content}")
+
+    digest_text = "\n".join(digest_parts)
+
+    # Use the same LLM (without tools) to create a concise summary
+    summary_response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a concise summarizer. Condense the following "
+                "conversation history into a brief summary (max 300 words). "
+                "Preserve key facts: data values from SQL queries, SOP rules "
+                "cited, compliance statuses, GPS coordinates discussed, "
+                "weather/corridor conditions retrieved, and any decisions made. "
+                "Do NOT include raw JSON, full table dumps, or tool arguments. /no_think"
+            )
+        ),
+        HumanMessage(content=digest_text),
+    ])
+
+    new_summary = summary_response.content
+
+    # Remove the older messages from state using RemoveMessage
+    removals = [RemoveMessage(id=m.id) for m in older if m.id]
+
+    return {
+        "messages": removals,
+        "conversation_summary": new_summary,
+    }
+
 
 print("⚙️ Compiling LangGraph FDE Orchestrator...")
 graph_builder = StateGraph(AgentState)
 graph_builder.add_node("reasoner", reasoning_node)
 graph_builder.add_node("tools", ToolNode(fde_tools))
+graph_builder.add_node("compact_history", compact_history)
 
 graph_builder.add_edge(START, "reasoner")
 graph_builder.add_conditional_edges("reasoner", tools_condition)
-graph_builder.add_edge("tools", "reasoner")
+graph_builder.add_edge("tools", "compact_history")
+graph_builder.add_edge("compact_history", "reasoner")
 
 fde_agent = graph_builder.compile(checkpointer=MemorySaver())
 

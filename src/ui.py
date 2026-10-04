@@ -36,7 +36,7 @@ db_password = os.getenv("SQL_AGENT_PASSWORD")
 connection_string = (
     f"DRIVER={{ODBC Driver 18 for SQL Server}};"
     f"SERVER={db_host},{db_port};"
-    f"DATABASE=SupplyChainDB_Cloud;"
+    f"DATABASE=SupplyChainDB;"
     f"UID={db_user};"
     f"PWD={db_password};"
     f"Encrypt=no;"
@@ -257,7 +257,7 @@ elif app_mode == "🛡️ Security & Audit Logs":
                 admin_params = urllib.parse.quote_plus(
                     "DRIVER={ODBC Driver 18 for SQL Server};"
                     f"SERVER={db_host},{db_port};"
-                    "DATABASE=SupplyChainDB_Cloud;"
+                    "DATABASE=SupplyChainDB;"
                     f"UID={input_user};"
                     f"PWD={input_pass};"
                     "Encrypt=no;"
